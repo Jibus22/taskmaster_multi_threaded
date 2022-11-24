@@ -1,0 +1,48 @@
+programs:
+  daemon_ALPHA:
+    cmd: "/home/user42/42/taskmaster/test/daemons/daemon_ALPHA arg1 arg2"
+    numprocs: 2
+    umask: 777
+    workingdir: /tmp
+    autostart: true
+    autorestart: unexpected
+    exitcodes:
+      - 0
+      - 2
+    startretries: 3
+    starttime: 5
+    stopsignal: TERM
+    stoptime: 10
+    stdout: /tmp/alpha.stdout
+    stderr: /tmp/alpha.stderr
+    env:
+      STARTED_BY: taskmaster
+      ANSWER: 42
+  daemon_BETA:
+    cmd: "/home/user42/42/taskmaster/test/daemons/daemon_BETA arg1 arg2"
+    numprocs: 5
+    umask: 077
+    workingdir: /home/user42
+    autostart: true
+    autorestart: true
+    exitcodes: 0
+    startretries: 2
+    starttime: 10
+    stopsignal: USR1
+    stoptime: 10
+    stdout: /tmp/beta.stdout
+    stderr: /tmp/beta.stderr
+  daemon_DELTA:
+    cmd: "/home/user42/42/taskmaster/test/daemons/daemon_DELTA bla1 bla2"
+    numprocs: 1
+    umask: 077
+    workingdir: /home/user42
+    autostart: true
+    autorestart: true
+    exitcodes: 0
+    startretries: 2
+    starttime: 10
+    stopsignal: USR1
+    stoptime: 10
+    stdout: /tmp/beta.stdout
+    stderr: /tmp/beta.stderr

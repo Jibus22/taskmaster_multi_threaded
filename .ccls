@@ -1,0 +1,7 @@
+clang
+%c -std=c11
+%h
+
+-I./include
+-I./src
+-D_GNU_SOURCE

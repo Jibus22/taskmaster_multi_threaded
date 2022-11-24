@@ -1,0 +1,15 @@
+programs:
+  daemon_BETA:
+    cmd: "/home/user42/42/taskmaster/test/daemons/daemon_BETA arg1 arg2"
+    numprocs: 4
+    umask: 077
+    workingdir: /home/user42
+    autostart: true
+    autorestart: true
+    exitcodes: 0
+    startretries: 2
+    starttime: 10
+    stopsignal: USR1
+    stoptime: 10
+    stdout: /tmp/beta.stdout
+    stderr: /tmp/beta.stderr

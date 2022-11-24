@@ -1,0 +1,17 @@
+*.out
+TODO
+note
+.git
+build
+core
+*.o
+*.so
+*.a
+*~
+*.pdf
+test/daemons
+*.swp
+lib
+taskmaster
+*.log
+yaml*/
