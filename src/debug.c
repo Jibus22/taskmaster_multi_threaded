@@ -1,7 +1,10 @@
 #include "taskmaster.h"
 
-void print_pgm_list(t_pgm *pgm) {
-    while (pgm) {
+void print_pgm_list(t_pgm *head) {
+#ifdef DEVELOPEMENT
+    t_pgm_usr *pgm;
+    while (head) {
+        pgm = &head->usr;
         printf("-------------------\n");
         printf("addr: %p\nname: %s\nstdout: %s\nstderr: %s\nworkingdir: %s\n",
                pgm, pgm->name, pgm->std_out, pgm->std_err, pgm->workingdir);
@@ -20,8 +23,11 @@ void print_pgm_list(t_pgm *pgm) {
             "%d\nnext: %p\n",
             pgm->numprocs, pgm->umask, pgm->autorestart, pgm->startretries,
             pgm->autostart, pgm->stopsignal.name, pgm->starttime, pgm->stoptime,
-            pgm->next);
+            head->privy.next);
         fflush(stdout);
-        pgm = pgm->next;
+        head = head->privy.next;
     }
+#else
+    UNUSED_PARAM(head);
+#endif
 }

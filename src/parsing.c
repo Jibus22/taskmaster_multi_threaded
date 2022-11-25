@@ -1,43 +1,45 @@
-#include "taskmaster.h"
 #include "parsing.h"
 
-static void handle_parse_error(yaml_event_t *event, uint8_t err) {
-  static const char err_type[PARSING_ERROR_NB_MAX][ERR_TYPE_BUF_SIZE] = {
-      "\0",
-      "undefined error\0",
-      "wrong key\0",
-      "numproc key: wrong value\0",
-      "umask key: wrong value\0",
-      "autorestart key: wrong value\0",
-      "startretries key: wrong value\0",
-      "autostart key: wrong value\0",
-      "signal key: wrong value\0",
-      "starttime key: wrong value\0",
-      "stoptime key: wrong value\0",
-      "command key: value missing\0",
-      "env key: value missing\0",
-      "stdout key: value missing\0",
-      "stderr key: value missing\0",
-      "workingdir key: value missing\0",
-      "exitcodes key: value missing\0",
-      "numproc key: value missing\0",
-      "umask key: value missing\0",
-      "autorestart key: value missing\0",
-      "startretries key: value missing\0",
-      "starttime key: value missing\0",
-      "stopsignal key: value missing\0",
-      "stoptime key: value missing\0",
-  };
+#include "taskmaster.h"
+
+static const char err_type[CONFIG_ERROR_NB_MAX][ERR_TYPE_BUF_SIZE] = {
+    "\0",
+    "undefined error\0",
+    "wrong key\0",
+    "wrong value\0",
+    "value missing\0",
+};
+
+static const char keys[KEY_NB_MAX][KEY_BUF_LEN] = {
+    "\0",           "cmd\0",         "env\0",          "stdout\0",
+    "stderr\0",     "workingdir\0",  "exitcodes\0",    "numprocs\0",
+    "umask\0",      "autorestart\0", "startretries\0", "autostart\0",
+    "stopsignal\0", "starttime\0",   "stoptime\0",
+};
+
+static t_config_error print_san_err(t_keys key, t_config_error err,
+                                    const char *err_msg) {
+  char err_msg_buf[ERR_MSG_BUF_SIZE] = {0};
+  snprintf(err_msg_buf, ERR_MSG_BUF_SIZE, "Sanitize error: %s%s%s%s\n",
+           keys[key], key ? " key: " : "", err_type[err],
+           err_msg ? err_msg : "");
+  write(STDERR_FILENO, err_msg_buf, strlen(err_msg_buf));
+  return err;
+}
+
+static void handle_config_error(yaml_event_t *event, t_config_error err,
+                                t_keys key) {
   char err_msg_buf[ERR_MSG_BUF_SIZE] = {0};
 
   snprintf(err_msg_buf, ERR_MSG_BUF_SIZE,
-           "Parse error: %s\nLine: %lu Column: %lu\n", err_type[err],
-           event->start_mark.line + 1, event->start_mark.column + 1);
+           "Parse error: %s%s%s\nLine: %lu Column: %lu\n", keys[key],
+           key ? " key: " : "", err_type[err], event->start_mark.line + 1,
+           event->start_mark.column + 1);
   write(STDERR_FILENO, err_msg_buf, strlen(err_msg_buf));
 }
 
 static const t_signal siglist[SIGNAL_NB] = {
-    {"SIGHUP\0", 1},     /*    terminal line hangup */
+    {"SIGHUP\0", 1},     /*  terminal line hangup */
     {"SIGINT\0", 2},     /*  interrupt program */
     {"SIGQUIT\0", 3},    /*  quit program */
     {"SIGILL\0", 4},     /*  illegal instruction */
@@ -69,36 +71,6 @@ static const t_signal siglist[SIGNAL_NB] = {
     {"SIGUSR1\0", 30},   /*  User defined signal 1 */
     {"SIGUSR2\0", 31}    /*  User defined signal 2 */
 };
-
-static void destroy_pgm_user_attributes(t_pgm *pgm) {
-  DESTROY_PTR(pgm->name);
-  if (pgm->cmd) {
-    for (uint32_t i = 0; pgm->cmd[i]; i++) DESTROY_PTR(pgm->cmd[i]);
-    DESTROY_PTR(pgm->cmd);
-  }
-  if (pgm->env.array_val) {
-    for (uint32_t i = 0; i < pgm->env.array_size; i++)
-      DESTROY_PTR(pgm->env.array_val[i]);
-    DESTROY_PTR(pgm->env.array_val);
-  }
-  DESTROY_PTR(pgm->std_out);
-  DESTROY_PTR(pgm->std_err);
-  DESTROY_PTR(pgm->workingdir);
-  DESTROY_PTR(pgm->exitcodes.array_val);
-  bzero(pgm, sizeof(*pgm));
-}
-
-static void destroy_pgm_list(t_pgm **head) {
-  t_pgm *next;
-
-  while (*head) {
-    next = (*head)->next;
-    destroy_pgm_user_attributes(*head);
-    DESTROY_PTR(*head);
-    *head = next;
-  }
-  *head = NULL;
-}
 
 static void *destroy_str_array(char **array, uint32_t cnt) {
   for (uint32_t i = 0; i < cnt; i++) free(array[i]);
@@ -155,10 +127,16 @@ static char **ft_split(const char *str, char c) {
   return array;
 }
 
+DECL_DATA_LOAD_HANDLER(nokey_data_load) {
+  UNUSED_PARAM(pgm);
+  UNUSED_PARAM(data);
+  return EXIT_FAILURE;
+}
+
 DECL_DATA_LOAD_HANDLER(cmd_data_load) {
   char *cmd;
 
-  if (!*data) return CMD_MISS;
+  if (!*data) return MISSING_ERROR;
   cmd = strdup(data);
   if (!cmd) handle_error("strdup");
   pgm->cmd = ft_split(cmd, ' ');
@@ -172,7 +150,7 @@ DECL_DATA_LOAD_HANDLER(env_data_load) {
   size_t data_len = strlen(data), old_len;
   char *str = NULL, *old_str;
 
-  if (!*data) return ENV_MISS;
+  if (!*data) return MISSING_ERROR;
 
   if (data_type == KEY_TYPE) {
     /* create a new char pointer for a new key=value pair*/
@@ -206,21 +184,21 @@ DECL_DATA_LOAD_HANDLER(env_data_load) {
 }
 
 DECL_DATA_LOAD_HANDLER(stdout_data_load) {
-  if (!*data) return STDOUT_MISS;
+  if (!*data) return MISSING_ERROR;
   pgm->std_out = strdup(data);
   if (!pgm->std_out) handle_error("strdup");
   return EXIT_SUCCESS;
 }
 
 DECL_DATA_LOAD_HANDLER(stderr_data_load) {
-  if (!*data) return STDERR_MISS;
+  if (!*data) return MISSING_ERROR;
   pgm->std_err = strdup(data);
   if (!pgm->std_err) handle_error("strdup");
   return EXIT_SUCCESS;
 }
 
 DECL_DATA_LOAD_HANDLER(workingdir_data_load) {
-  if (!*data) return WD_MISS;
+  if (!*data) return MISSING_ERROR;
   pgm->workingdir = strdup(data);
   if (!pgm->workingdir) handle_error("strdup");
   return EXIT_SUCCESS;
@@ -229,7 +207,7 @@ DECL_DATA_LOAD_HANDLER(workingdir_data_load) {
 DECL_DATA_LOAD_HANDLER(exitcodes_data_load) {
   char *endptr;
 
-  if (!*data) return EXITCODE_MISS;
+  if (!*data) return MISSING_ERROR;
   if (!pgm->exitcodes.array_val) {
     pgm->exitcodes.array_size++;
     pgm->exitcodes.array_val =
@@ -251,18 +229,18 @@ DECL_DATA_LOAD_HANDLER(exitcodes_data_load) {
 DECL_DATA_LOAD_HANDLER(numprocs_data_load) {
   char *endptr;
 
-  if (!*data) return NUMPROC_MISS;
+  if (!*data) return MISSING_ERROR;
   pgm->numprocs = (uint16_t)strtoumax(data, &endptr, 10);
-  if (pgm->numprocs > SAN_NUM_PROC_MAX) return NUMPROC_ERR;
+  if (pgm->numprocs > SAN_NUM_PROC_MAX) return VALUE_ERROR;
   return EXIT_SUCCESS;
 }
 
 DECL_DATA_LOAD_HANDLER(umask_data_load) {
   char *endptr;
 
-  if (!*data) return UMASK_MISS;
+  if (!*data) return MISSING_ERROR;
   pgm->umask = (mode_t)strtoumax(data, &endptr, 8);
-  if (pgm->umask > 0777) return UMASK_ERR;
+  if (pgm->umask > 0777) return VALUE_ERROR;
   return EXIT_SUCCESS;
 }
 
@@ -274,7 +252,7 @@ DECL_DATA_LOAD_HANDLER(autorestart_data_load) {
       "unexpected\0",
   };
 
-  if (!*data) return AUTORESTART_MISS;
+  if (!*data) return MISSING_ERROR;
   while (i < autorestart_max) {
     if (!strcmp(autorestart_keys[i], data)) {
       pgm->autorestart = i;
@@ -282,16 +260,16 @@ DECL_DATA_LOAD_HANDLER(autorestart_data_load) {
     }
     i++;
   }
-  if (i == autorestart_max) return AUTORESTART_ERR;
+  if (i == autorestart_max) return VALUE_ERROR;
   return EXIT_SUCCESS;
 }
 
 DECL_DATA_LOAD_HANDLER(startretries_data_load) {
   char *endptr;
 
-  if (!*data) return STARTRETRIES_MISS;
+  if (!*data) return MISSING_ERROR;
   pgm->startretries = (uint8_t)strtoumax(data, &endptr, 10);
-  if (pgm->startretries > SAN_RETRIES_MAX) return RETRIES_ERR;
+  if (pgm->startretries > SAN_RETRIES_MAX) return VALUE_ERROR;
   return EXIT_SUCCESS;
 }
 
@@ -302,14 +280,14 @@ DECL_DATA_LOAD_HANDLER(autostart_data_load) {
   else if (!strcmp("false\0", data))
     pgm->autostart = false;
   else
-    return AUTOSTART_ERR;
+    return VALUE_ERROR;
   return EXIT_SUCCESS;
 }
 
 DECL_DATA_LOAD_HANDLER(stopsignal_data_load) {
   uint32_t i = 0;
 
-  if (!*data) return STOPSIGNAL_MISS;
+  if (!*data) return MISSING_ERROR;
   while (i < SIGNAL_NB) {
     if (!strcmp(siglist[i].name, data)) {
       pgm->stopsignal = siglist[i];
@@ -317,16 +295,16 @@ DECL_DATA_LOAD_HANDLER(stopsignal_data_load) {
     }
     i++;
   }
-  if (i == SIGNAL_NB) return WRONG_STOP_SIGNAL;
+  if (i == SIGNAL_NB) return VALUE_ERROR;
   return EXIT_SUCCESS;
 }
 
 DECL_DATA_LOAD_HANDLER(starttime_data_load) {
   char *endptr;
 
-  if (!*data) return STARTTIME_MISS;
+  if (!*data) return MISSING_ERROR;
   pgm->starttime = (uint32_t)strtoumax(data, &endptr, 10);
-  if (pgm->starttime > SAN_STARTTIME_MAX) return STARTTIME_ERR;
+  if (pgm->starttime > SAN_STARTTIME_MAX) return VALUE_ERROR;
   pgm->starttime *= SEC_TO_MS;
   return EXIT_SUCCESS;
 }
@@ -334,20 +312,20 @@ DECL_DATA_LOAD_HANDLER(starttime_data_load) {
 DECL_DATA_LOAD_HANDLER(stoptime_data_load) {
   char *endptr;
 
-  if (!*data) return STOPTIME_MISS;
+  if (!*data) return MISSING_ERROR;
   pgm->stoptime = (uint32_t)strtoumax(data, &endptr, 10);
-  if (pgm->stoptime > SAN_STOPTIME_MAX) return STOPTIME_ERR;
+  if (pgm->stoptime > SAN_STOPTIME_MAX) return VALUE_ERROR;
   pgm->stoptime *= SEC_TO_MS;
   return EXIT_SUCCESS;
 }
 
 /* array of functions of type DATA_LOAD_HANDLER */
-uint8_t (*handle_data_loading[KEY_NB_MAX])(t_pgm *, const char *) = {
-    cmd_data_load,          env_data_load,        stdout_data_load,
-    stderr_data_load,       workingdir_data_load, exitcodes_data_load,
-    numprocs_data_load,     umask_data_load,      autorestart_data_load,
-    startretries_data_load, autostart_data_load,  stopsignal_data_load,
-    starttime_data_load,    stoptime_data_load,
+uint8_t (*handle_data_loading[KEY_NB_MAX])(t_pgm_usr *, const char *) = {
+    nokey_data_load,       cmd_data_load,          env_data_load,
+    stdout_data_load,      stderr_data_load,       workingdir_data_load,
+    exitcodes_data_load,   numprocs_data_load,     umask_data_load,
+    autorestart_data_load, startretries_data_load, autostart_data_load,
+    stopsignal_data_load,  starttime_data_load,    stoptime_data_load,
 };
 
 DECL_YAML_HANDLER(yaml_nothing) {
@@ -423,22 +401,15 @@ DECL_YAML_HANDLER(yaml_scalar_2) {
   UNUSED_PARAM(parsing);
   t_pgm *new = calloc(1, sizeof(*new));
   if (!new) handle_error("calloc");
-  if (node->head) new->next = node->head;
+  if (node->head) new->privy.next = node->head;
   node->head = new;
-  new->name = strdup((char *)event->data.scalar.value);
-  if (!new->name) handle_error("strdup");
+  new->usr.name = strdup((char *)event->data.scalar.value);
+  if (!new->usr.name) handle_error("strdup");
   return EXIT_SUCCESS;
 }
 
 static int8_t findkey(const char *key) {
-  static const char keys[KEY_NB_MAX][KEY_BUF_LEN] = {
-      "cmd\0",         "env\0",          "stdout\0",    "stderr\0",
-      "workingdir\0",  "exitcodes\0",    "numprocs\0",  "umask\0",
-      "autorestart\0", "startretries\0", "autostart\0", "stopsignal\0",
-      "starttime\0",   "stoptime\0",
-  };
-
-  for (int8_t i = 0; i < KEY_NB_MAX; i++)
+  for (int8_t i = 1; i < KEY_NB_MAX; i++)
     if (!strcmp(keys[i], key)) return i;
   return (-1);
 }
@@ -446,16 +417,17 @@ static int8_t findkey(const char *key) {
 /* this depth of scalar event concerns all variables of a t_pgm */
 DECL_YAML_HANDLER(yaml_scalar_3) {
   uint8_t ret = EXIT_SUCCESS;
-  if (IS_KEY) {
+  if (parsing->scalar_type == KEY_TYPE) {
     parsing->key = findkey((char *)event->data.scalar.value);
     ret = (ret * (parsing->key >= 0)) + (WRONG_KEY * (parsing->key == -1));
-  } else if (IS_VALUE) {
-    if (parsing->key == -1 || parsing->key >= KEY_NB_MAX) return EXIT_FAILURE;
-    ret = handle_data_loading[parsing->key](node->head,
+  } else if (parsing->scalar_type == VALUE_TYPE) {
+    if (parsing->key < 1 || parsing->key >= KEY_NB_MAX) return EXIT_FAILURE;
+    ret = handle_data_loading[parsing->key](&node->head->usr,
                                             (char *)event->data.scalar.value);
   } else
     return EXIT_FAILURE;
-  if (!parsing->seq_depth) TOGGLE_SCALAR_TYPE; /* toggle between key & value */
+  if (!parsing->seq_depth)
+    TOGGLE_TYPE(parsing->scalar_type); /* toggle between key & value */
   return ret;
 }
 
@@ -466,7 +438,7 @@ DECL_YAML_HANDLER(yaml_scalar_4) {
   if (parsing->key != KEY_ENV || parsing->key == -1 ||
       parsing->key >= KEY_NB_MAX)
     return EXIT_FAILURE;
-  ret = handle_data_loading[parsing->key](node->head,
+  ret = handle_data_loading[parsing->key](&node->head->usr,
                                           (char *)event->data.scalar.value);
   return ret;
 }
@@ -512,6 +484,7 @@ DECL_YAML_HANDLER(yaml_map_e) {
   UNUSED_PARAM(event);
   parsing->map_depth--;
   parsing->scalar_type = KEY_TYPE; /* we fall back on a key after this event */
+  if (parsing->map_depth < 3) parsing->key = 0; /* reset key */
   return EXIT_SUCCESS;
 }
 
@@ -525,17 +498,11 @@ uint8_t (*handle_yaml_event[YAML_MAX_EVENT])(t_tm_node *, t_config_parsing *,
 uint8_t load_config_file(t_tm_node *node) {
   yaml_parser_t parser;
   yaml_event_t event;
-  yaml_event_type_t type;
   t_config_parsing parsing = {0};
   uint8_t done = 0, ret;
 
-  /* Create the Parser object. */
   yaml_parser_initialize(&parser);
-
-  /* Set a file input. */
-  FILE *input = fopen("test.yaml", "r");
-  if (!input) handle_error("fopen");
-  yaml_parser_set_input_file(&parser, input);
+  yaml_parser_set_input_file(&parser, node->config_file);
 
   /* Read the event sequence. */
   while (!done) {
@@ -551,14 +518,13 @@ uint8_t load_config_file(t_tm_node *node) {
       goto error;
     }
 
-    type = event.type;
-    ret = handle_yaml_event[type](node, &parsing, &event);
+    ret = handle_yaml_event[event.type](node, &parsing, &event);
     if (ret) {
-      handle_parse_error(&event, ret);
+      handle_config_error(&event, ret, parsing.key);
       yaml_event_delete(&event);
       goto error;
     }
-    done = (type == YAML_STREAM_END_EVENT);
+    done = (event.type == YAML_STREAM_END_EVENT);
     yaml_event_delete(&event);
   }
 
@@ -568,6 +534,69 @@ uint8_t load_config_file(t_tm_node *node) {
 error:
   destroy_pgm_list(&node->head);
   yaml_parser_delete(&parser);
-  fclose(input);
+  fclose(node->config_file);
   return EXIT_FAILURE;
+}
+
+uint8_t sanitize_config(t_tm_node *node) {
+  t_pgm_usr *pgm;
+  struct stat statbuf;
+  t_keys key;
+  uint8_t err, tot_err = 0;
+  int8_t ret;
+
+  for (t_pgm *head = node->head; head; head = head->privy.next) {
+    pgm = &head->usr;
+    err = 0;
+
+    if (!pgm->cmd || !*(pgm->cmd))
+      tot_err++, key = KEY_CMD, err = print_san_err(key, MISSING_ERROR, NULL);
+    if (pgm->cmd) {
+      ret = stat(pgm->cmd[0], &statbuf);
+      if (ret == -1) {
+        tot_err++, key = KEY_CMD, err = print_san_err(key, 0, strerror(errno));
+      } else if (!ret) {
+        if (!S_ISREG(statbuf.st_mode))
+          tot_err++, key = KEY_CMD,
+                     err = print_san_err(key, 0, "Not a regular file");
+      }
+    }
+    if (pgm->workingdir) {
+      ret = stat(pgm->workingdir, &statbuf);
+      if (ret == -1) {
+        tot_err++, key = KEY_WORKINGDIR,
+                   err = print_san_err(key, 0, strerror(errno));
+      } else if (!ret) {
+        if (!S_ISDIR(statbuf.st_mode))
+          tot_err++, key = KEY_WORKINGDIR,
+                     err = print_san_err(key, 0, "Not a directory");
+      }
+    }
+    if (!pgm->numprocs)
+      tot_err++, key = KEY_NUMPROCS,
+                 err = print_san_err(key, MISSING_ERROR, NULL);
+    if (pgm->std_out) {
+      head->privy.log.out =
+          open(pgm->std_out, O_WRONLY | O_CREAT | O_APPEND, LOGFILE_PERM);
+      if (head->privy.log.out == -1) {
+        tot_err++, key = KEY_STDOUT,
+                   err = print_san_err(key, 0, strerror(errno));
+      }
+    }
+    if (pgm->std_err) {
+      head->privy.log.err =
+          open(pgm->std_err, O_WRONLY | O_CREAT | O_APPEND, LOGFILE_PERM);
+      if (head->privy.log.err == -1) {
+        tot_err++, key = KEY_STDERR,
+                   err = print_san_err(key, 0, strerror(errno));
+      }
+    }
+  }
+
+  if (tot_err) {
+    fprintf(stderr, "%d error%c detected\n", tot_err, tot_err > 1 ? 's' : '\0');
+    destroy_taskmaster(node);
+    return EXIT_FAILURE;
+  }
+  return EXIT_SUCCESS;
 }

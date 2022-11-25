@@ -1,5 +1,5 @@
-#ifndef TM_PARSING_H
-#define TM_PARSING_H
+#ifndef PARSING_H
+#define PARSING_H
 
 #include <inttypes.h>
 
@@ -7,7 +7,8 @@
 #define KEY_BUF_LEN (32) /* buffer size to store a key name */
 
 /* different keys for a config file */
-enum e_keys {
+typedef enum e_keys {
+  NO_KEY,
   KEY_CMD,
   KEY_ENV,
   KEY_STDOUT,
@@ -23,7 +24,7 @@ enum e_keys {
   KEY_STARTTIME,
   KEY_STOPTIME,
   KEY_NB_MAX, /* number of keys in a config file */
-};
+} t_keys;
 
 #define AUTORESTART_BUF_SIZE                      \
   (32) /* buffer size to store a autorestart name \
@@ -38,13 +39,6 @@ typedef struct s_config_parsing {
   uint8_t map_depth;   /* increments when a new field appears at a new level */
   uint8_t seq_depth;
 } t_config_parsing;
-
-#define IS_KEY (parsing->scalar_type == 0)
-#define IS_VALUE (parsing->scalar_type == 1)
-#define TOGGLE_SCALAR_TYPE            \
-  do {                                \
-    parsing->scalar_type ^= (1 << 0); \
-  } while (0)
 
 #define KEY_TYPE (0)
 #define VALUE_TYPE (1)
@@ -68,51 +62,26 @@ typedef enum e_parsing_info_mask {
   static uint8_t name(t_tm_node *node, t_config_parsing *parsing, \
                       yaml_event_t *event)
 #define DECL_DATA_LOAD_HANDLER(name) \
-  static uint8_t name(t_pgm *pgm, const char *data)
+  static uint8_t name(t_pgm_usr *pgm, const char *data)
 
 #define SAN_NUM_PROC_MAX (30)
 #define SAN_RETRIES_MAX (128)
 #define SAN_STARTTIME_MAX (120) /* in seconds */
 #define SAN_STOPTIME_MAX (60)   /* in seconds */
 
-#define ERR_TYPE_BUF_SIZE (48)
+#define LOGFILE_PERM (0755)
+
+#define ERR_TYPE_BUF_SIZE (32)
 #define ERR_MSG_BUF_SIZE (256)
 
-typedef enum e_parsing_error {
+typedef enum e_config_error {
   NO_ERROR,
   UNDEFINED_ERROR,
   WRONG_KEY,
-  NUMPROC_ERR,
-  UMASK_ERR,
-  AUTORESTART_ERR,
-  RETRIES_ERR,
-  AUTOSTART_ERR,
-  WRONG_STOP_SIGNAL,
-  STARTTIME_ERR,
-  STOPTIME_ERR,
-  CMD_MISS,
-  ENV_MISS,
-  STDOUT_MISS,
-  STDERR_MISS,
-  WD_MISS,
-  EXITCODE_MISS,
-  NUMPROC_MISS,
-  UMASK_MISS,
-  AUTORESTART_MISS,
-  STARTRETRIES_MISS,
-  STARTTIME_MISS,
-  STOPSIGNAL_MISS,
-  STOPTIME_MISS,
-  PARSING_ERROR_NB_MAX,
-} t_parsing_error;
-
-#define DESTROY_PTR(ptr) \
-  do {                   \
-    if ((ptr)) {         \
-      free((ptr));       \
-      ptr = NULL;        \
-    }                    \
-  } while (0)
+  VALUE_ERROR,
+  MISSING_ERROR,
+  CONFIG_ERROR_NB_MAX,
+} t_config_error;
 
 #endif
 

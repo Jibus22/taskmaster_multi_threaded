@@ -11,7 +11,7 @@ programs:
       - 2
     startretries: 1
     starttime: 3
-    stopsignal: USR1
+    stopsignal: SIGUSR1
     stoptime: 2
     stdout: /tmp/alpha.stdout
     stderr: /tmp/alpha.stderr

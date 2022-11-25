@@ -19,7 +19,6 @@ YAML := $(LIB_DIRECTORY)/libyaml-0.so.2.0.9
 
 ### SOURCE ###
 SRC := $(shell find $(SRC_DIRECTORY) -name '*.c')
-$(info $$SRC is [${SRC}])
 OBJ := $(SRC:$(SRC_DIRECTORY)/%.c=$(BUILD_DIRECTORY)/%.o)
 DEPS := $(OBJ:.o=.d)
 
@@ -27,7 +26,7 @@ DEPS := $(OBJ:.o=.d)
 CC := clang
 INC_FLAGS := $(addprefix -I,$(INC_DIRECTORY) $(INC_DIRECTORY2))
 CPPFLAGS := $(INC_FLAGS) -D_GNU_SOURCE -MMD -MP
-CFLAGS := -Wall -Wextra -Werror -fcommon
+CFLAGS := -Werror -fcommon
 
 ### LINK ###
 LDFLAGS := -L$(LIB_DIRECTORY)
