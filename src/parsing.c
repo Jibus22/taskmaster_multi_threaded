@@ -17,11 +17,12 @@ static const char keys[KEY_NB_MAX][KEY_BUF_LEN] = {
     "stopsignal\0", "starttime\0",   "stoptime\0",
 };
 
-static t_config_error print_san_err(t_keys key, t_config_error err,
-                                    const char *err_msg) {
+static t_config_error print_san_err(const char *name, t_keys key,
+                                    t_config_error err, const char *err_msg) {
   char err_msg_buf[ERR_MSG_BUF_SIZE] = {0};
-  snprintf(err_msg_buf, ERR_MSG_BUF_SIZE, "Sanitize error: %s%s%s%s\n",
-           keys[key], key ? " key: " : "", err_type[err],
+
+  snprintf(err_msg_buf, ERR_MSG_BUF_SIZE, "Sanitize error: %s - %s%s%s%s\n",
+           name, keys[key], key ? " key: " : "", err_type[err],
            err_msg ? err_msg : "");
   write(STDERR_FILENO, err_msg_buf, strlen(err_msg_buf));
   return err;
@@ -39,6 +40,7 @@ static void handle_config_error(yaml_event_t *event, t_config_error err,
 }
 
 static const t_signal siglist[SIGNAL_NB] = {
+    {"", 0},             /*  not a signal */
     {"SIGHUP\0", 1},     /*  terminal line hangup */
     {"SIGINT\0", 2},     /*  interrupt program */
     {"SIGQUIT\0", 3},    /*  quit program */
@@ -408,10 +410,10 @@ DECL_YAML_HANDLER(yaml_scalar_2) {
   return EXIT_SUCCESS;
 }
 
-static int8_t findkey(const char *key) {
+static t_keys findkey(const char *key) {
   for (int8_t i = 1; i < KEY_NB_MAX; i++)
     if (!strcmp(keys[i], key)) return i;
-  return (-1);
+  return (0);
 }
 
 /* this depth of scalar event concerns all variables of a t_pgm */
@@ -419,9 +421,9 @@ DECL_YAML_HANDLER(yaml_scalar_3) {
   uint8_t ret = EXIT_SUCCESS;
   if (parsing->scalar_type == KEY_TYPE) {
     parsing->key = findkey((char *)event->data.scalar.value);
-    ret = (ret * (parsing->key >= 0)) + (WRONG_KEY * (parsing->key == -1));
+    ret = (ret * (parsing->key > 0)) + (WRONG_KEY * (parsing->key == 0));
   } else if (parsing->scalar_type == VALUE_TYPE) {
-    if (parsing->key < 1 || parsing->key >= KEY_NB_MAX) return EXIT_FAILURE;
+    if (!parsing->key || parsing->key >= KEY_NB_MAX) return EXIT_FAILURE;
     ret = handle_data_loading[parsing->key](&node->head->usr,
                                             (char *)event->data.scalar.value);
   } else
@@ -435,8 +437,7 @@ DECL_YAML_HANDLER(yaml_scalar_3) {
 DECL_YAML_HANDLER(yaml_scalar_4) {
   uint8_t ret = EXIT_SUCCESS;
 
-  if (parsing->key != KEY_ENV || parsing->key == -1 ||
-      parsing->key >= KEY_NB_MAX)
+  if (parsing->key != KEY_ENV || !parsing->key || parsing->key >= KEY_NB_MAX)
     return EXIT_FAILURE;
   ret = handle_data_loading[parsing->key](&node->head->usr,
                                           (char *)event->data.scalar.value);
@@ -550,37 +551,40 @@ uint8_t sanitize_config(t_tm_node *node) {
     err = 0;
 
     if (!pgm->cmd || !*(pgm->cmd))
-      tot_err++, key = KEY_CMD, err = print_san_err(key, MISSING_ERROR, NULL);
+      tot_err++, key = KEY_CMD,
+                 err = print_san_err(pgm->name, key, MISSING_ERROR, NULL);
     if (pgm->cmd) {
       ret = stat(pgm->cmd[0], &statbuf);
       if (ret == -1) {
-        tot_err++, key = KEY_CMD, err = print_san_err(key, 0, strerror(errno));
+        tot_err++, key = KEY_CMD,
+                   err = print_san_err(pgm->name, key, 0, strerror(errno));
       } else if (!ret) {
         if (!S_ISREG(statbuf.st_mode))
-          tot_err++, key = KEY_CMD,
-                     err = print_san_err(key, 0, "Not a regular file");
+          tot_err++,
+              key = KEY_CMD,
+              err = print_san_err(pgm->name, key, 0, "Not a regular file");
       }
     }
     if (pgm->workingdir) {
       ret = stat(pgm->workingdir, &statbuf);
       if (ret == -1) {
         tot_err++, key = KEY_WORKINGDIR,
-                   err = print_san_err(key, 0, strerror(errno));
+                   err = print_san_err(pgm->name, key, 0, strerror(errno));
       } else if (!ret) {
         if (!S_ISDIR(statbuf.st_mode))
           tot_err++, key = KEY_WORKINGDIR,
-                     err = print_san_err(key, 0, "Not a directory");
+                     err = print_san_err(pgm->name, key, 0, "Not a directory");
       }
     }
     if (!pgm->numprocs)
       tot_err++, key = KEY_NUMPROCS,
-                 err = print_san_err(key, MISSING_ERROR, NULL);
+                 err = print_san_err(pgm->name, key, MISSING_ERROR, NULL);
     if (pgm->std_out) {
       head->privy.log.out =
           open(pgm->std_out, O_WRONLY | O_CREAT | O_APPEND, LOGFILE_PERM);
       if (head->privy.log.out == -1) {
         tot_err++, key = KEY_STDOUT,
-                   err = print_san_err(key, 0, strerror(errno));
+                   err = print_san_err(pgm->name, key, 0, strerror(errno));
       }
     }
     if (pgm->std_err) {
@@ -588,7 +592,7 @@ uint8_t sanitize_config(t_tm_node *node) {
           open(pgm->std_err, O_WRONLY | O_CREAT | O_APPEND, LOGFILE_PERM);
       if (head->privy.log.err == -1) {
         tot_err++, key = KEY_STDERR,
-                   err = print_san_err(key, 0, strerror(errno));
+                   err = print_san_err(pgm->name, key, 0, strerror(errno));
       }
     }
   }
@@ -599,4 +603,37 @@ uint8_t sanitize_config(t_tm_node *node) {
     return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
+}
+
+uint8_t fulfill_config(t_tm_node *node) {
+  t_pgm_usr *pgm;
+
+  for (t_pgm *head = node->head; head; head = head->privy.next) {
+    pgm = &head->usr;
+    if (!pgm->env.array_val) {
+      pgm->env.array_val = calloc(1, sizeof(*pgm->env.array_val));
+      if (!pgm->env.array_val) goto_error("calloc");
+      pgm->env.array_size++;
+    }
+    if (!pgm->std_out) {
+      pgm->std_out = strdup("/dev/null");
+      if (!pgm->std_out) goto_error("strdup");
+      head->privy.log.out =
+          open(pgm->std_out, O_WRONLY | O_CREAT | O_APPEND, LOGFILE_PERM);
+      if ((head->privy.log.out) == -1) goto_error("open");
+    }
+    if (!pgm->std_err) {
+      pgm->std_err = strdup("/dev/null");
+      if (!pgm->std_err) goto_error("strdup");
+      head->privy.log.err =
+          open(pgm->std_err, O_WRONLY | O_CREAT | O_APPEND, LOGFILE_PERM);
+      if ((head->privy.log.out) == -1) goto_error("open");
+    }
+    if (!pgm->stopsignal.nb) pgm->stopsignal = siglist[SIGTERM];
+  }
+  return EXIT_SUCCESS;
+
+error:
+  destroy_taskmaster(node);
+  return EXIT_FAILURE;
 }

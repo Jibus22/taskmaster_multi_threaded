@@ -32,11 +32,11 @@ int main(int ac, char **av) {
 
   if (get_options(ac, av, &node)) return EXIT_FAILURE;
   if (load_config_file(&node)) return EXIT_FAILURE;
-  print_pgm_list(node.head);
   if (sanitize_config(&node)) return EXIT_FAILURE;
-  /* complete_config(&node) */
+  if (fulfill_config(&node)) return EXIT_FAILURE;
   /* run_server(&node) */
-  /* run_client(&node) */
+  run_client(&node);
+  print_pgm_list(node.head);
   destroy_taskmaster(&node);
   return EXIT_SUCCESS;
 }

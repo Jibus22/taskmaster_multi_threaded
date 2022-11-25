@@ -30,6 +30,12 @@
     exit(EXIT_FAILURE);   \
   } while (0)
 
+#define goto_error(msg) \
+  do {                  \
+    perror(msg);        \
+    goto error;         \
+  } while (0)
+
 #define DESTROY_PTR(ptr) \
   do {                   \
     if ((ptr)) {         \
@@ -81,8 +87,8 @@ typedef struct s_pgm_usr {
 
 typedef struct s_pgm_private {
   struct log {
-    int32_t out; 
-    int32_t err; 
+    int32_t out;
+    int32_t err;
   } log;
   struct s_pgm *next;
 } t_pgm_private;
@@ -100,6 +106,10 @@ typedef struct s_tm_node {
 /* parsing.c */
 uint8_t load_config_file(t_tm_node *node);
 uint8_t sanitize_config(t_tm_node *node);
+uint8_t fulfill_config(t_tm_node *node);
+
+/* run_client.c */
+uint8_t run_client(t_tm_node *node);
 
 /* debug.c */
 void print_pgm_list(t_pgm *pgm);

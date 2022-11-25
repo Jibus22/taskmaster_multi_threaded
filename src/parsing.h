@@ -3,7 +3,7 @@
 
 #include <inttypes.h>
 
-#define SIGNAL_NB (31)   /* number of posix signal */
+#define SIGNAL_NB (32)   /* number of posix signal */
 #define KEY_BUF_LEN (32) /* buffer size to store a key name */
 
 /* different keys for a config file */
@@ -35,7 +35,7 @@ typedef enum e_keys {
 typedef struct s_config_parsing {
   uint8_t info; /* bit interrupt to detect '+STR - +DOC - +MAP' start sequence*/
   uint8_t scalar_type; /* is it a key or a value */
-  int8_t key;          /* key number */
+  t_keys key;          /* key number */
   uint8_t map_depth;   /* increments when a new field appears at a new level */
   uint8_t seq_depth;
 } t_config_parsing;

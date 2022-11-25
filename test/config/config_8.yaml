@@ -11,7 +11,7 @@ programs:
       - 2
     startretries: 3
     starttime: 2
-    stopsignal: TERM
+    stopsignal: SIGTERM
     stoptime: 5
     stdout: /tmp/alpha.stdout
     stderr: /tmp/alpha.stderr
@@ -28,7 +28,7 @@ programs:
     exitcodes: 0
     startretries: 2
     starttime: 1
-    stopsignal: USR1
+    stopsignal: SIGUSR1
     stoptime: 3
     stdout: /tmp/beta.stdout
     stderr: /tmp/beta.stderr
@@ -42,7 +42,7 @@ programs:
     exitcodes: 0
     startretries: 2
     starttime: 2
-    stopsignal: USR1
+    stopsignal: SIGUSR1
     stoptime: 4
     stdout: /tmp/beta.stdout
     stderr: /tmp/beta.stderr
@@ -56,7 +56,7 @@ programs:
     exitcodes: 0
     startretries: 2
     starttime: 8
-    stopsignal: USR1
+    stopsignal: SIGUSR1
     stoptime: 2
     stdout: /tmp/beta.stdout
     stderr: /tmp/beta.stderr
