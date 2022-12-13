@@ -10,6 +10,7 @@ core
 *~
 *.pdf
 test/daemons
+test/poc
 *.swp
 lib
 taskmaster

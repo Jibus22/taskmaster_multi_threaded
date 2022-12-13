@@ -1,11 +1,11 @@
 #include "taskmaster.h"
 
-static uint8_t usage(char **av) {
+static uint8_t usage(char *const *av) {
   fprintf(stderr, "Usage: %s [-f filename]\n", av[0]);
   return EXIT_FAILURE;
 }
 
-static uint8_t get_options(int ac, char **av, t_tm_node *node) {
+static uint8_t get_options(int ac, char *const *av, t_tm_node *node) {
   int32_t opt;
 
   while ((opt = getopt(ac, av, "f:")) != -1) {
@@ -28,7 +28,7 @@ static uint8_t get_options(int ac, char **av, t_tm_node *node) {
 }
 
 int main(int ac, char **av) {
-  t_tm_node node = {0};
+  t_tm_node node = {.tm_name = av[0], 0};
 
   if (get_options(ac, av, &node)) return EXIT_FAILURE;
   if (load_config_file(&node)) return EXIT_FAILURE;

@@ -407,6 +407,7 @@ DECL_YAML_HANDLER(yaml_scalar_2) {
   node->head = new;
   new->usr.name = strdup((char *)event->data.scalar.value);
   if (!new->usr.name) handle_error("strdup");
+  node->pgm_nb++;
   return EXIT_SUCCESS;
 }
 
@@ -490,8 +491,9 @@ DECL_YAML_HANDLER(yaml_map_e) {
 }
 
 /* array of functions of type YAML_HANDLER */
-uint8_t (*handle_yaml_event[YAML_MAX_EVENT])(t_tm_node *, t_config_parsing *,
-                                             yaml_event_t *) = {
+static uint8_t (*handle_yaml_event[YAML_MAX_EVENT])(t_tm_node *,
+                                                    t_config_parsing *,
+                                                    yaml_event_t *) = {
     yaml_nothing, yaml_stream_st, yaml_stream_e, yaml_doc_st,
     yaml_doc_e,   yaml_alias,     yaml_scalar,   yaml_seq_st,
     yaml_seq_e,   yaml_map_st,    yaml_map_e};
@@ -605,6 +607,7 @@ uint8_t sanitize_config(t_tm_node *node) {
   return EXIT_SUCCESS;
 }
 
+/* set default values in blank variables of t_pgm */
 uint8_t fulfill_config(t_tm_node *node) {
   t_pgm_usr *pgm;
 

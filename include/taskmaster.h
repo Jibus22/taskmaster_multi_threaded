@@ -82,7 +82,7 @@ typedef struct s_pgm_usr {
   uint32_t starttime;        /* time until it is considered a processus is well
                                 launched. in ms*/
   uint32_t stoptime;         /* time allowed to a processus to stop before it is
-                              killed.   in ms*/
+                              killed. in ms*/
 } t_pgm_usr;
 
 typedef struct s_pgm_private {
@@ -99,8 +99,10 @@ typedef struct s_pgm {
 } t_pgm;
 
 typedef struct s_tm_node {
+  char *tm_name;
   FILE *config_file;
   t_pgm *head;
+  uint32_t pgm_nb;
 } t_tm_node;
 
 /* parsing.c */
