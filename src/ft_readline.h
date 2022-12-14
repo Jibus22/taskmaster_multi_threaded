@@ -1,18 +1,7 @@
 #ifndef FT_READLINE_H
 #define FT_READLINE_H
 
-#include <assert.h>
-#include <ctype.h>
-#include <errno.h>
 #include <inttypes.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <termios.h>
 #include <unistd.h>
 
 #define FT_READLINE_MAX_LINE (4096)

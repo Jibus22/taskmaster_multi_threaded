@@ -1,6 +1,12 @@
 #include "parsing.h"
 
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/stat.h>
+#include <errno.h>
+
 #include "taskmaster.h"
+#include "yaml.h"
 
 /* ============================= error handling ============================= */
 

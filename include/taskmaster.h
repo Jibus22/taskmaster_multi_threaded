@@ -1,25 +1,11 @@
 #ifndef TASKMASTER_H
 #define TASKMASTER_H
 
-#include <errno.h>
-#include <fcntl.h>
 #include <inttypes.h>
-#include <limits.h>
-#include <netdb.h>
-#include <pthread.h>
-#include <semaphore.h>
-#include <signal.h>
-#include <stdatomic.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/wait.h>
-#include <term.h>
 #include <unistd.h>
 
 #define handle_error(msg) \

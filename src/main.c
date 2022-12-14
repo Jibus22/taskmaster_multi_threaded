@@ -1,4 +1,5 @@
 #include "taskmaster.h"
+#include <errno.h>
 
 static uint8_t usage(char *const *av) {
   fprintf(stderr, "Usage: %s [-f filename]\n", av[0]);
