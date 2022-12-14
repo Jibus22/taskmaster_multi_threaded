@@ -22,8 +22,6 @@
 #include <term.h>
 #include <unistd.h>
 
-#include "yaml.h"
-
 #define handle_error(msg) \
   do {                    \
     perror(msg);          \

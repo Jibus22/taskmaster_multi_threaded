@@ -2,6 +2,8 @@
 
 #include "taskmaster.h"
 
+/* ============================= error handling ============================= */
+
 static const char err_type[CONFIG_ERROR_NB_MAX][ERR_TYPE_BUF_SIZE] = {
     "\0",
     "undefined error\0",
@@ -39,39 +41,43 @@ static void handle_config_error(yaml_event_t *event, t_config_error err,
   write(STDERR_FILENO, err_msg_buf, strlen(err_msg_buf));
 }
 
+/* =============================== utils ==================================== */
+
 static const t_signal siglist[SIGNAL_NB] = {
-    {"", 0},             /*  not a signal */
-    {"SIGHUP\0", 1},     /*  terminal line hangup */
-    {"SIGINT\0", 2},     /*  interrupt program */
-    {"SIGQUIT\0", 3},    /*  quit program */
-    {"SIGILL\0", 4},     /*  illegal instruction */
-    {"SIGTRAP\0", 5},    /*  trace trap */
-    {"SIGABRT\0", 6},    /*  abort program (formerly SIGIOT) */
-    {"SIGEMT\0", 7},     /*  emulate instruction executed */
-    {"SIGFPE\0", 8},     /*  floating-point exception */
-    {"SIGKILL\0", 9},    /*  kill program */
-    {"SIGBUS\0", 10},    /*  bus error */
-    {"SIGSEGV\0", 11},   /*  segmentation violation */
-    {"SIGSYS\0", 12},    /*  non-existent system call invoked */
-    {"SIGPIPE\0", 13},   /*  write on a pipe with no reader */
-    {"SIGALRM\0", 14},   /*  real-time timer expired */
-    {"SIGTERM\0", 15},   /*  software termination signal */
-    {"SIGURG\0", 16},    /*  urgent condition present on socket */
-    {"SIGSTOP\0", 17},   /*  stop (cannot be caught or ignored) */
-    {"SIGTSTP\0", 18},   /*  stop signal generated from keyboard */
-    {"SIGCONT\0", 19},   /*  continue after stop */
-    {"SIGCHLD\0", 20},   /*  child status has changed */
-    {"SIGTTIN\0", 21},   /*  background read attempted from control terminal */
-    {"SIGTTOU\0", 22},   /*  background write attempted to control terminal */
-    {"SIGIO\0", 23},     /*  I/O is possible on a descriptor (see fcntl(2)) */
-    {"SIGXCPU\0", 24},   /*  cpu time limit exceeded (see setrlimit(2)) */
-    {"SIGXFSZ\0", 25},   /*  file size limit exceeded (see setrlimit(2)) */
-    {"SIGVTALRM\0", 26}, /*  virtual time alarm (see setitimer(2)) */
-    {"SIGPROF\0", 27},   /*  profiling timer alarm (see setitimer(2)) */
-    {"SIGWINCH\0", 28},  /*  Window size change */
-    {"SIGINFO\0", 29},   /*  status request from keyboard */
-    {"SIGUSR1\0", 30},   /*  User defined signal 1 */
-    {"SIGUSR2\0", 31}    /*  User defined signal 2 */
+    {"", 0},                /*  not a signal */
+    {"SIGHUP\0", SIGHUP},   /*  terminal line hangup */
+    {"SIGINT\0", SIGINT},   /*  interrupt program */
+    {"SIGQUIT\0", SIGQUIT}, /*  quit program */
+    {"SIGILL\0", SIGILL},   /*  illegal instruction */
+    {"SIGTRAP\0", SIGTRAP}, /*  trace trap */
+    {"SIGABRT\0", SIGABRT}, /*  abort program (formerly SIGIOT) */
+    {"SIGEMT\0", 7},        /*  emulate instruction executed */
+    {"SIGFPE\0", SIGFPE},   /*  floating-point exception */
+    {"SIGKILL\0", SIGKILL}, /*  kill program */
+    {"SIGBUS\0", SIGBUS},   /*  bus error */
+    {"SIGSEGV\0", SIGSEGV}, /*  segmentation violation */
+    {"SIGSYS\0", SIGSYS},   /*  non-existent system call invoked */
+    {"SIGPIPE\0", SIGPIPE}, /*  write on a pipe with no reader */
+    {"SIGALRM\0", SIGALRM}, /*  real-time timer expired */
+    {"SIGTERM\0", SIGTERM}, /*  software termination signal */
+    {"SIGURG\0", SIGURG},   /*  urgent condition present on socket */
+    {"SIGSTOP\0", SIGSTOP}, /*  stop (cannot be caught or ignored) */
+    {"SIGTSTP\0", SIGTSTP}, /*  stop signal generated from keyboard */
+    {"SIGCONT\0", SIGCONT}, /*  continue after stop */
+    {"SIGCHLD\0", SIGCHLD}, /*  child status has changed */
+    {"SIGTTIN\0",
+     SIGTTIN}, /*  background read attempted from control terminal */
+    {"SIGTTOU\0",
+     SIGTTOU},          /*  background write attempted to control terminal */
+    {"SIGIO\0", SIGIO}, /*  I/O is possible on a descriptor (see fcntl(2)) */
+    {"SIGXCPU\0", SIGXCPU}, /*  cpu time limit exceeded (see setrlimit(2)) */
+    {"SIGXFSZ\0", SIGXFSZ}, /*  file size limit exceeded (see setrlimit(2)) */
+    {"SIGVTALRM\0", SIGVTALRM}, /*  virtual time alarm (see setitimer(2)) */
+    {"SIGPROF\0", SIGPROF},     /*  profiling timer alarm (see setitimer(2)) */
+    {"SIGWINCH\0", SIGWINCH},   /*  Window size change */
+    {"SIGINFO\0", 29},          /*  status request from keyboard */
+    {"SIGUSR1\0", SIGUSR1},     /*  User defined signal 1 */
+    {"SIGUSR2\0", SIGUSR2}      /*  User defined signal 2 */
 };
 
 static void *destroy_str_array(char **array, uint32_t cnt) {
@@ -82,9 +88,8 @@ static void *destroy_str_array(char **array, uint32_t cnt) {
 
 typedef void *(*t_cb)(char **, const char *, uint32_t, uint32_t);
 
-/* return how many strings can be created and if a callback is set, process
- * it.
- */
+/* return how many strings can be created and if a callback is set,
+ * process it. */
 static int32_t roam_process_string(const char *str, char c, char **array,
                                    t_cb callback) {
   uint32_t i = 0, cnt = 0, start;
@@ -128,6 +133,8 @@ static char **ft_split(const char *str, char c) {
   if (roam_process_string(str, c, array, add_string) == -1) return NULL;
   return array;
 }
+
+/* =========================== data_load handlers =========================== */
 
 DECL_DATA_LOAD_HANDLER(nokey_data_load) {
   UNUSED_PARAM(pgm);
@@ -330,6 +337,8 @@ uint8_t (*handle_data_loading[KEY_NB_MAX])(t_pgm_usr *, const char *) = {
     stopsignal_data_load,  starttime_data_load,    stoptime_data_load,
 };
 
+/* ============================= yaml handlers ============================== */
+
 DECL_YAML_HANDLER(yaml_nothing) {
   UNUSED_PARAM(node);
   UNUSED_PARAM(parsing);
@@ -445,14 +454,13 @@ DECL_YAML_HANDLER(yaml_scalar_4) {
   return ret;
 }
 
-/* array of functions of type YAML_HANDLER */
-uint8_t (*handle_yaml_scalar_event[YAML_MAX_SCALAR_EVENT])(t_tm_node *,
-                                                           t_config_parsing *,
-                                                           yaml_event_t *) = {
-    yaml_scalar_0, yaml_scalar_1, yaml_scalar_2, yaml_scalar_3, yaml_scalar_4};
-
 DECL_YAML_HANDLER(yaml_scalar) {
   UNUSED_PARAM(node);
+  static uint8_t (*handle_yaml_scalar_event[YAML_MAX_SCALAR_EVENT])(
+      t_tm_node *, t_config_parsing *, yaml_event_t *) = {
+      yaml_scalar_0, yaml_scalar_1, yaml_scalar_2, yaml_scalar_3,
+      yaml_scalar_4}; /* array of functions of type YAML_HANDLER */
+
   if (parsing->map_depth >= YAML_MAX_SCALAR_EVENT) return EXIT_FAILURE;
   return handle_yaml_scalar_event[parsing->map_depth](node, parsing, event);
 }
@@ -490,19 +498,19 @@ DECL_YAML_HANDLER(yaml_map_e) {
   return EXIT_SUCCESS;
 }
 
-/* array of functions of type YAML_HANDLER */
-static uint8_t (*handle_yaml_event[YAML_MAX_EVENT])(t_tm_node *,
-                                                    t_config_parsing *,
-                                                    yaml_event_t *) = {
-    yaml_nothing, yaml_stream_st, yaml_stream_e, yaml_doc_st,
-    yaml_doc_e,   yaml_alias,     yaml_scalar,   yaml_seq_st,
-    yaml_seq_e,   yaml_map_st,    yaml_map_e};
+/* ========================= main parsing functions ========================= */
 
 uint8_t load_config_file(t_tm_node *node) {
   yaml_parser_t parser;
   yaml_event_t event;
   t_config_parsing parsing = {0};
   uint8_t done = 0, ret;
+  uint8_t (*handle_yaml_event[YAML_MAX_EVENT])(t_tm_node *, t_config_parsing *,
+                                               yaml_event_t *) = {
+      yaml_nothing, yaml_stream_st, yaml_stream_e, yaml_doc_st,
+      yaml_doc_e,   yaml_alias,     yaml_scalar,   yaml_seq_st,
+      yaml_seq_e,   yaml_map_st,    yaml_map_e}; /* array of functions of type
+                                                    YAML_HANDLER */
 
   yaml_parser_initialize(&parser);
   yaml_parser_set_input_file(&parser, node->config_file);

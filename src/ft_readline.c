@@ -1,5 +1,5 @@
 /*
- * This non-canonical line reader does'nt uses termcap or termios database so
+ * This non-canonical line reader does'nt uses termcap or terminfo database so
  * no additional library is linked to. In return this is only compatible with
  * terminal which understand VT100 sequences (the majority).
  * resources:
@@ -122,7 +122,7 @@ fatal:
 /* Use the ESC [6n escape sequence to query the horizontal cursor position
  * and return it. On error -1 is returned, on success the position of the
  * cursor. */
-static int getCursorPosition(int ifd, int ofd) {
+static int get_cursor_position(int ifd, int ofd) {
   char buf[32];
   int cols, rows;
   unsigned int i = 0;
@@ -146,7 +146,7 @@ static int getCursorPosition(int ifd, int ofd) {
 
 /* Try to get the number of columns in the current terminal, or assume 80
  * if it fails. */
-static int getColumns(int ifd, int ofd) {
+static int get_columns(int ifd, int ofd) {
   struct winsize ws;
 
   if (ioctl(1, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
@@ -154,12 +154,12 @@ static int getColumns(int ifd, int ofd) {
     int start, cols;
 
     /* Get the initial position so we can restore it later. */
-    start = getCursorPosition(ifd, ofd);
+    start = get_cursor_position(ifd, ofd);
     if (start == -1) goto failed;
 
     /* Go to right margin and get position. */
     if (write(ofd, "\x1b[999C", 6) != 6) goto failed;
-    cols = getCursorPosition(ifd, ofd);
+    cols = get_cursor_position(ifd, ofd);
     if (cols == -1) goto failed;
 
     /* Restore position. */
@@ -613,7 +613,7 @@ static void rl_init(t_readline_state *rl, char *buf, const char *prompt,
   rl->plen = strlen(prompt);
   rl->pos = 0;
   rl->len = 0;
-  rl->cols = getColumns(STDIN_FILENO, STDOUT_FILENO);
+  rl->cols = get_columns(STDIN_FILENO, STDOUT_FILENO);
   rl->history_index = 0;
   rl->init_hidx = 0;
   rl->buf[0] = '\0'; /* Buffer starts empty. */

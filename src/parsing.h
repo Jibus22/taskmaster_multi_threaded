@@ -1,6 +1,7 @@
 #ifndef PARSING_H
 #define PARSING_H
 
+#include "yaml.h"
 #include <inttypes.h>
 
 #define SIGNAL_NB (32)   /* number of posix signal */

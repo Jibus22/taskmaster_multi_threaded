@@ -1,21 +1,8 @@
+#include "run_client.h"
+
 #include "ft_readline.h"
-#include "taskmaster.h"
 
-#define TM_CMD_NB (7)
-#define TM_CMD_BUF_SZ (32)
-
-#define MAX_CMD_ARG (5)
-
-typedef uint8_t (*cmd_handler)(const t_tm_node *node, void *command);
-
-typedef enum cmd_flag { NO_ARGS, ONE_ARG, MANY_ARGS } t_cmd_flag;
-
-typedef struct s_tm_cmd {
-    cmd_handler handler;      /* handler for the command 'name' */
-    char name[TM_CMD_BUF_SZ]; /* name of the command */
-    t_cmd_flag flag; /* how many arguments the command is supposed to accept */
-    char *args[MAX_CMD_ARG]; /* pointers to arguments */
-} t_tm_cmd;
+/* =============================== initialization =========================== */
 
 static void *destroy_str_array(char **array, uint32_t sz) {
     while (--sz >= 0) {
@@ -25,6 +12,7 @@ static void *destroy_str_array(char **array, uint32_t sz) {
     return NULL;
 }
 
+/* add taskmaster commands and program names to completion */
 static char **get_completion(const t_tm_node *node, const t_tm_cmd *commands,
                              uint32_t cmd_nb) {
     uint32_t i = 0;
@@ -47,80 +35,98 @@ static char **get_completion(const t_tm_node *node, const t_tm_cmd *commands,
     return completions;
 }
 
-#define DECL_CMD_HANDLER(name) \
-    static uint8_t name(const t_tm_node *node, void *arg)
+/* ============================== command handlers ========================== */
+
+static char *get_next_word(const char *str) {
+    int32_t i = 0;
+
+    while (str[i] == ' ') i++;
+    if (i) return (char *)(str + i);
+    while (str[i] && str[i] != ' ') i++;
+    while (str[i] == ' ') i++;
+    if (!str[i]) return NULL;
+    return (char *)(str + i);
+}
+
+static void add_event(const t_tm_node *node, t_pgm *pgm, t_client_ev event) {
+    printf("add event %d to pgm %s\n", event, pgm->usr.name);
+}
 
 /* status can have 0 or 1 argument */
 DECL_CMD_HANDLER(cmd_status) {
-    t_tm_cmd *cmd = arg;
-    printf("args: |%s|\n", cmd->name);
+    t_tm_cmd *cmd = command;
+    printf("commands: |%s|\n", cmd->name);
 
-    /* j'ai des arguments qui correspondent au pgm à checker, en vrai je devrais
-     * peu-être enregistrer l(es) index du maillon concerné ? */
     return EXIT_SUCCESS;
 }
 
-/* start has one argument which must match with a pgm name */
+/* compare pgm names with the current argument and returns the corresponding
+ * pgm adress if it match */
+static t_pgm *get_pgm(const t_tm_node *node, char **args) {
+    if (!*args) return NULL;
+    for (t_pgm *pgm = node->head; pgm; pgm = pgm->privy.next) {
+        if (!strncmp(pgm->usr.name, *args, strlen(pgm->usr.name))) {
+            *args = get_next_word(*args);
+            return pgm;
+        }
+    }
+    return NULL;
+}
+
+/* start has many arguments which must match with a pgm name */
 DECL_CMD_HANDLER(cmd_start) {
-    t_tm_cmd *cmd = arg;
-    printf("args: |%s|\n", cmd->name);
+    t_tm_cmd *cmd = command;
+    char *args = cmd->args;
+    t_pgm *pgm;
 
+    while ((pgm = get_pgm(node, &args))) add_event(node, pgm, CLIENT_EV_START);
     return EXIT_SUCCESS;
 }
 
-/* start has one argument which must match with a pgm name */
+/* stop has many arguments which must match with a pgm name */
 DECL_CMD_HANDLER(cmd_stop) {
-    t_tm_cmd *cmd = arg;
-    printf("args: |%s|\n", cmd->name);
+    t_tm_cmd *cmd = command;
+    char *args = cmd->args;
+    t_pgm *pgm;
+
+    while ((pgm = get_pgm(node, &args))) add_event(node, pgm, CLIENT_EV_STOP);
+    return EXIT_SUCCESS;
+}
+
+/* restart has many arguments which must match with a pgm name */
+DECL_CMD_HANDLER(cmd_restart) {
+    t_tm_cmd *cmd = command;
+    char *args = cmd->args;
+    t_pgm *pgm;
+
+    while ((pgm = get_pgm(node, &args)))
+        add_event(node, pgm, CLIENT_EV_RESTART);
     return EXIT_SUCCESS;
 }
 
 /* reload config has 0 argument */
 DECL_CMD_HANDLER(cmd_reload) {
-    t_tm_cmd *cmd = arg;
-    printf("args: |%s|\n", cmd->name);
-    return EXIT_SUCCESS;
-}
-
-/* restart has one argument which must match with a pgm name */
-DECL_CMD_HANDLER(cmd_restart) {
-    t_tm_cmd *cmd = arg;
-    printf("args: |%s|\n", cmd->name);
+    t_tm_cmd *cmd = command;
+    printf("commands: |%s|\n", cmd->name);
     return EXIT_SUCCESS;
 }
 
 /* exit has 0 argument */
 DECL_CMD_HANDLER(cmd_exit) {
-    t_tm_cmd *cmd = arg;
-    printf("args: |%s|\n", cmd->name);
+    t_tm_cmd *cmd = command;
+    printf("commands: |%s|\n", cmd->name);
     return EXIT_SUCCESS;
 }
 
 /* help has 0 argument */
 DECL_CMD_HANDLER(cmd_help) {
-    t_tm_cmd *cmd = arg;
-    printf("args: |%s|\n", cmd->name);
+    t_tm_cmd *cmd = command;
+    printf("commands: |%s|\n", cmd->name);
     return EXIT_SUCCESS;
 }
 
-#define CMD_ERR_OFFSET (-42)
-#define CMD_ERR_NB (CMD_MAX - CMD_ERR_OFFSET)
-typedef enum e_cmd_err {
-    CMD_NO_ERR = CMD_ERR_OFFSET,
-    CMD_EMPTY_LINE,
-    CMD_NOT_FOUND,
-    CMD_TOO_MANY_ARGS,
-    CMD_ARG_MISSING,
-    CMD_BAD_ARG,
-    CMD_MAX,
-} t_cmd_err;
+/* ========================== user input sanitizer ========================== */
 
-static int32_t arg_error(t_tm_cmd *command, int32_t err) {
-    bzero(command->args, sizeof(command->args));
-    return err;
-}
-
-#define CMD_ERR_BUFSZ (32)
 static void err_usr_input(t_tm_node *node, int32_t err) {
     static const char cmd_errors[CMD_ERR_NB][CMD_ERR_BUFSZ] = {
         "\0",
@@ -138,85 +144,130 @@ static void err_usr_input(t_tm_node *node, int32_t err) {
 static int32_t sanitize_arg(const t_tm_node *node, t_tm_cmd *command,
                             const char *args) {
     t_pgm *pgm;
-    int32_t i = 0, match_nb = 0, word_start, arg_len;
+    int32_t i = 0, match_nb = 0, arg_len;
     bool found;
 
     while (args[i] == ' ') i++;
     while (args[i]) {
         found = false;
         if (command->flag == NO_ARGS) return CMD_TOO_MANY_ARGS;
-        word_start = i;
+
         for (pgm = node->head; pgm && !found; pgm = pgm->privy.next) {
             arg_len = strlen(pgm->usr.name);
-            if (!strncmp(args + word_start, pgm->usr.name, arg_len) &&
-                (args[word_start + arg_len] == ' ' ||
-                 args[word_start + arg_len] == 0)) {
-                if (match_nb == MAX_CMD_ARG)
-                    return arg_error(command, CMD_TOO_MANY_ARGS);
-                command->args[match_nb] = (char *)(args + word_start);
+            if (!strncmp(args + i, pgm->usr.name, arg_len) &&
+                (args[i + arg_len] == ' ' || args[i + arg_len] == 0)) {
+                if (match_nb == node->pgm_nb) return CMD_TOO_MANY_ARGS;
+                if (!match_nb) command->args = (char *)(args + i);
                 match_nb++;
                 found = true;
                 i += arg_len;
             }
         }
-        if (!found) return arg_error(command, CMD_BAD_ARG);
+
+        if (!found) return CMD_BAD_ARG;
         while (args[i] == ' ') i++;
     }
-    if (command->flag == MANY_ARGS && !match_nb)
-        return arg_error(command, CMD_ARG_MISSING);
+
+    if (command->flag == MANY_ARGS && !match_nb) return CMD_ARG_MISSING;
     return EXIT_SUCCESS;
 }
 
 /* search for a registered command & sanitize its args */
 static int32_t find_cmd(const t_tm_node *node, t_tm_cmd *command,
                         const char *line) {
-    int32_t word_start = 0, cmd_len, ret;
+    int32_t cmd_len, ret;
 
-    while (line[word_start] && line[word_start] == ' ') word_start++;
-    if (!line[word_start]) return CMD_EMPTY_LINE;
+    if (!line[0]) return CMD_EMPTY_LINE;
     for (int32_t i = 0; i < TM_CMD_NB; i++) {
         cmd_len = strlen(command[i].name);
-        if (!strncmp(line + word_start, command[i].name, cmd_len) &&
-            (line[word_start + cmd_len] == ' ' ||
-             !line[word_start + cmd_len])) {
-            ret = sanitize_arg(node, &command[i], line + word_start + cmd_len);
+        if (!strncmp(line, command[i].name, cmd_len) &&
+            (line[cmd_len] == ' ' || !line[cmd_len])) {
+            ret = sanitize_arg(node, &command[i], line + cmd_len);
             return ((i * (ret >= 0)) + (ret * (ret < 0)));
         }
     }
     return CMD_NOT_FOUND;
 }
 
+/* Always append a NULL char at the end of dst, size should be at least
+ * stlren(src)+1 */
+static size_t strcpy_safe(char *dst, const char *src, size_t size) {
+    uint32_t i = 0;
+
+    if (!size) return strlen(src);
+    while (src[i] && i + 1 < size) {
+        dst[i] = src[i];
+        i++;
+    }
+    dst[i] = 0;
+    if (!src[i]) return i;
+    return strlen(src);
+}
+
+/* remove extra spaces */
+static void format_user_input(char *line) {
+    int32_t i = 0, space;
+
+    while (line[i] == ' ') i++;
+    if (!line[i]) {
+        line[0] = 0;
+        return;
+    }
+    if (i) strcpy_safe(line, line + i, strlen(line + i) + 1);
+
+    i = 0;
+    while (line[i]) {
+        space = 0;
+        while (line[i] == ' ') {
+            space++;
+            i++;
+        }
+        if (!line[i]) {
+            line[i - space] = 0;
+            return;
+        }
+        if (space > 1) {
+            strcpy_safe(line + (i - space + 1), line + i, strlen(line + i) + 1);
+            i = i - space + 1;
+        }
+        i += (space == 0);
+    }
+}
+
+/* ============================= client engine ============================== */
+
+/* reset args of command */
+static inline void clean_command(t_tm_cmd *command) {
+    for (int32_t i = 0; i < TM_CMD_NB; i++) command[i].args = NULL;
+}
+
+/* main client function. Reads, sanitize & execute client input */
 uint8_t run_client(t_tm_node *node) {
     char *line = NULL;
     char **completion = NULL;
     int32_t cmd_nb = TM_CMD_NB + node->pgm_nb, hdlr_type;
-    t_tm_cmd commands[TM_CMD_NB] = {{cmd_status, "status", MANY_ARGS, {0}},
-                                    {cmd_start, "start", MANY_ARGS, {0}},
-                                    {cmd_stop, "stop", MANY_ARGS, {0}},
-                                    {cmd_restart, "restart", MANY_ARGS, {0}},
-                                    {cmd_reload, "reload", NO_ARGS, {0}},
-                                    {cmd_exit, "exit", NO_ARGS, {0}},
-                                    {cmd_help, "help", NO_ARGS, {0}}};
+    t_tm_cmd command[TM_CMD_NB] = {{cmd_status, "status", FREE_NB_ARGS, 0},
+                                   {cmd_start, "start", MANY_ARGS, 0},
+                                   {cmd_stop, "stop", MANY_ARGS, 0},
+                                   {cmd_restart, "restart", MANY_ARGS, 0},
+                                   {cmd_reload, "reload", NO_ARGS, 0},
+                                   {cmd_exit, "exit", NO_ARGS, 0},
+                                   {cmd_help, "help", NO_ARGS, 0}};
 
-    completion = get_completion(node, commands, cmd_nb);
+    completion = get_completion(node, command, cmd_nb);
     ft_readline_add_completion(completion, cmd_nb);
 
-    while ((line = ft_readline("taskmaster> ")) != NULL) {
-        printf("You wrote: |%s|\n", line);
+    while ((line = ft_readline("taskmaster$ ")) != NULL) {
         ft_readline_add_history(line);
-        hdlr_type = find_cmd(node, commands, line);
+        format_user_input(line); /* maybe use this only to send to a client */
+        hdlr_type = find_cmd(node, command, line);
 
-        if (hdlr_type >= 0)
-            commands[hdlr_type].handler(node, &commands[hdlr_type]);
-        else if (hdlr_type == CMD_EMPTY_LINE) { /* empty or space-filled line */
-            free(line);
-            continue;
-        } else
+        if (hdlr_type >= 0) {
+            command[hdlr_type].handler(node, &command[hdlr_type]);
+        } else if (hdlr_type != CMD_EMPTY_LINE)
             err_usr_input(node, hdlr_type);
+        clean_command(command);
         free(line);
     }
     return EXIT_SUCCESS;
 }
-
-/* 3- interpréter les commandes
- * 4- Pour le ctrl-z je le raise donc plus qu'à le gérer */
