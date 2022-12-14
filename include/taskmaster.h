@@ -30,10 +30,10 @@
 
 #define UNUSED_PARAM(a) (void)(a);
 
-#define SIGNAL_BUF_SIZE 32
+#define SIGNAL_BUF_SIZE (32) /* buffer size to store signal name */
 typedef struct s_signal {
-  char name[SIGNAL_BUF_SIZE];
-  uint8_t nb;
+  char name[SIGNAL_BUF_SIZE]; /* name of signal */
+  uint8_t nb;                 /* number corresponding to the signal */
 } t_signal;
 
 typedef enum e_autorestart {
@@ -43,6 +43,7 @@ typedef enum e_autorestart {
   autorestart_max
 } t_autorestart;
 
+/* data of a program fetch in config file */
 typedef struct s_pgm_usr {
   char *name; /* pgm name */
   char **cmd; /* launch command */
@@ -69,24 +70,26 @@ typedef struct s_pgm_usr {
                               killed. in ms*/
 } t_pgm_usr;
 
+/* data of a program dynamically filled at runtime for taskmaster operations */
 typedef struct s_pgm_private {
   struct log {
-    int32_t out;
-    int32_t err;
+    int32_t out; /* fd for logging out */
+    int32_t err; /* fd for logging err */
   } log;
-  struct s_pgm *next;
+  struct s_pgm *next; /* next link of the linked list */
 } t_pgm_private;
 
+/* concatenation of all data a pgm need in taskmaster */
 typedef struct s_pgm {
   t_pgm_usr usr;
   t_pgm_private privy;
 } t_pgm;
 
 typedef struct s_tm_node {
-  char *tm_name;
-  FILE *config_file;
-  t_pgm *head;
-  uint32_t pgm_nb;
+  char *tm_name;     /* taskmaster name (argv[0]) */
+  FILE *config_file; /* configuration file */
+  t_pgm *head;       /* head of list of programs */
+  uint32_t pgm_nb;   /* number of programs */
 } t_tm_node;
 
 /* parsing.c */

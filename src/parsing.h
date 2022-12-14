@@ -26,9 +26,7 @@ typedef enum e_keys {
   KEY_NB_MAX, /* number of keys in a config file */
 } t_keys;
 
-#define AUTORESTART_BUF_SIZE                      \
-  (32) /* buffer size to store a autorestart name \
-        */
+#define AUTORESTART_BUF_SIZE (32) /* buf size to store a autorestart name */
 
 #define SEC_TO_MS (1000)
 

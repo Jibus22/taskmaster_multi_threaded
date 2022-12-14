@@ -12,7 +12,7 @@ static void *destroy_str_array(char **array, uint32_t sz) {
     return NULL;
 }
 
-/* add taskmaster commands and program names to completion */
+/* Add taskmaster commands and program names to completion */
 static char **get_completion(const t_tm_node *node, const t_tm_cmd *commands,
                              uint32_t cmd_nb) {
     uint32_t i = 0;
@@ -60,7 +60,7 @@ DECL_CMD_HANDLER(cmd_status) {
     return EXIT_SUCCESS;
 }
 
-/* compare pgm names with the current argument and returns the corresponding
+/* Compare pgm names with the current argument and returns the corresponding
  * pgm adress if it match */
 static t_pgm *get_pgm(const t_tm_node *node, char **args) {
     if (!*args) return NULL;
@@ -172,7 +172,7 @@ static int32_t sanitize_arg(const t_tm_node *node, t_tm_cmd *command,
     return EXIT_SUCCESS;
 }
 
-/* search for a registered command & sanitize its args */
+/* Search for a registered command & sanitize its args */
 static int32_t find_cmd(const t_tm_node *node, t_tm_cmd *command,
                         const char *line) {
     int32_t cmd_len, ret;
@@ -204,7 +204,7 @@ static size_t strcpy_safe(char *dst, const char *src, size_t size) {
     return strlen(src);
 }
 
-/* remove extra spaces */
+/* Remove extra spaces */
 static void format_user_input(char *line) {
     int32_t i = 0, space;
 
@@ -236,12 +236,12 @@ static void format_user_input(char *line) {
 
 /* ============================= client engine ============================== */
 
-/* reset args of command */
+/* Reset args of command */
 static inline void clean_command(t_tm_cmd *command) {
     for (int32_t i = 0; i < TM_CMD_NB; i++) command[i].args = NULL;
 }
 
-/* main client function. Reads, sanitize & execute client input */
+/* Main client function. Reads, sanitize & execute client input */
 uint8_t run_client(t_tm_node *node) {
     char *line = NULL;
     char **completion = NULL;

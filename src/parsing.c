@@ -1,9 +1,9 @@
 #include "parsing.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/stat.h>
-#include <errno.h>
 
 #include "taskmaster.h"
 #include "yaml.h"
@@ -335,7 +335,7 @@ DECL_DATA_LOAD_HANDLER(stoptime_data_load) {
 }
 
 /* array of functions of type DATA_LOAD_HANDLER */
-uint8_t (*handle_data_loading[KEY_NB_MAX])(t_pgm_usr *, const char *) = {
+static uint8_t (*handle_data_loading[KEY_NB_MAX])(t_pgm_usr *, const char *) = {
     nokey_data_load,       cmd_data_load,          env_data_load,
     stdout_data_load,      stderr_data_load,       workingdir_data_load,
     exitcodes_data_load,   numprocs_data_load,     umask_data_load,
@@ -395,8 +395,7 @@ DECL_YAML_HANDLER(yaml_scalar_0) {
 }
 
 /* this depth of scalar event should happen only once and declare the begining
- * of programs declaration
- */
+ * of programs declaration */
 DECL_YAML_HANDLER(yaml_scalar_1) {
   UNUSED_PARAM(node);
   if (parsing->info != PARSING_READY) {
@@ -412,8 +411,7 @@ DECL_YAML_HANDLER(yaml_scalar_1) {
 }
 
 /* this depth of scalar event is a declaration of a new program, the key being
- * the program name
- */
+ * the program name */
 DECL_YAML_HANDLER(yaml_scalar_2) {
   UNUSED_PARAM(parsing);
   t_pgm *new = calloc(1, sizeof(*new));
@@ -506,6 +504,8 @@ DECL_YAML_HANDLER(yaml_map_e) {
 
 /* ========================= main parsing functions ========================= */
 
+/* Parse yaml configuration file and load data into t_pgm linked list.
+ * Do some basic sanitation */
 uint8_t load_config_file(t_tm_node *node) {
   yaml_parser_t parser;
   yaml_event_t event;
@@ -555,6 +555,7 @@ error:
   return EXIT_FAILURE;
 }
 
+/* Sanitize configuration. Verify files and directory access, open logging fd */
 uint8_t sanitize_config(t_tm_node *node) {
   t_pgm_usr *pgm;
   struct stat statbuf;
@@ -621,7 +622,7 @@ uint8_t sanitize_config(t_tm_node *node) {
   return EXIT_SUCCESS;
 }
 
-/* set default values in blank variables of t_pgm */
+/* Set default values in blank variables of t_pgm */
 uint8_t fulfill_config(t_tm_node *node) {
   t_pgm_usr *pgm;
 
