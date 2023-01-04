@@ -651,7 +651,6 @@ char *ft_readline(const char *prompt) {
   }
 
   disable_raw_mode();
-  printf("\n");
-  if (run < 0) return NULL;
-  return strdup(buf);
+  write(STDOUT_FILENO, "\n", 1);
+  return (run < 0) ? NULL : strdup(buf);
 }

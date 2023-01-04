@@ -1,6 +1,9 @@
 #include "run_client.h"
 
+#include <pthread.h>
+
 #include "ft_readline.h"
+#include "run_server.h"
 
 /* =============================== initialization =========================== */
 
@@ -48,16 +51,14 @@ static char *get_next_word(const char *str) {
     return (char *)(str + i);
 }
 
-static void add_event(const t_tm_node *node, t_pgm *pgm, t_client_ev event) {
-    printf("add event %d to pgm %s\n", event, pgm->usr.name);
-}
-
-/* status can have 0 or 1 argument */
-DECL_CMD_HANDLER(cmd_status) {
-    t_tm_cmd *cmd = command;
-    printf("commands: |%s|\n", cmd->name);
-
-    return EXIT_SUCCESS;
+static void add_event(t_tm_node *node, t_event event) {
+    UNUSED_PARAM(node);
+    sem_wait(&node->free_place);
+    pthread_mutex_lock(&node->mtx_queue);
+    node->event_queue[node->ev_queue_sz] = event;
+    node->ev_queue_sz++;
+    pthread_mutex_unlock(&node->mtx_queue);
+    sem_post(&node->new_event);
 }
 
 /* Compare pgm names with the current argument and returns the corresponding
@@ -73,13 +74,49 @@ static t_pgm *get_pgm(const t_tm_node *node, char **args) {
     return NULL;
 }
 
+/* status can have 0 or 1 argument */
+DECL_CMD_HANDLER(cmd_status) {
+    t_tm_cmd *cmd = command;
+    char *args = cmd->args;
+    t_pgm *pgm;
+    t_thread_data *thrd;
+    const char state[4][16] = {"stopped", "started", "starting", "stopping"};
+    int32_t proc_st;
+
+    if (cmd->args) {
+        while ((pgm = get_pgm(node, &args))) {
+            printf("- %s:\n", pgm->usr.name);
+            for (int32_t i = pgm->usr.numprocs - 1; i >= 0; i--) {
+                thrd = &(pgm->privy.thrd[i]);
+                proc_st = ((GET_PROC_STATE == PROC_ST_STARTED) * 1) +
+                          ((GET_PROC_STATE == PROC_ST_STARTING) * 2) +
+                          ((GET_PROC_STATE == PROC_ST_STOPPING) * 3);
+                printf("pid <%d> - state <%s>\n", thrd->pid, state[proc_st]);
+            }
+        }
+    } else {
+        for (pgm = node->head; pgm; pgm = pgm->privy.next) {
+            uint32_t started = 0;
+            for (int32_t i = pgm->usr.numprocs - 1; i >= 0; i--) {
+                thrd = &(pgm->privy.thrd[i]);
+                started = started + (GET_PROC_STATE == PROC_ST_STARTED);
+            }
+            printf("%s - run <%u/%u>\n", pgm->usr.name, started,
+                   pgm->usr.numprocs);
+        }
+    }
+    fflush(stdout);
+    return EXIT_SUCCESS;
+}
+
 /* start has many arguments which must match with a pgm name */
 DECL_CMD_HANDLER(cmd_start) {
     t_tm_cmd *cmd = command;
     char *args = cmd->args;
     t_pgm *pgm;
 
-    while ((pgm = get_pgm(node, &args))) add_event(node, pgm, CLIENT_EV_START);
+    while ((pgm = get_pgm(node, &args)))
+        add_event(node, (t_event){pgm, CLIENT_START});
     return EXIT_SUCCESS;
 }
 
@@ -89,7 +126,8 @@ DECL_CMD_HANDLER(cmd_stop) {
     char *args = cmd->args;
     t_pgm *pgm;
 
-    while ((pgm = get_pgm(node, &args))) add_event(node, pgm, CLIENT_EV_STOP);
+    while ((pgm = get_pgm(node, &args)))
+        add_event(node, (t_event){pgm, CLIENT_STOP});
     return EXIT_SUCCESS;
 }
 
@@ -100,28 +138,39 @@ DECL_CMD_HANDLER(cmd_restart) {
     t_pgm *pgm;
 
     while ((pgm = get_pgm(node, &args)))
-        add_event(node, pgm, CLIENT_EV_RESTART);
+        add_event(node, (t_event){pgm, CLIENT_RESTART});
     return EXIT_SUCCESS;
 }
 
 /* reload config has 0 argument */
 DECL_CMD_HANDLER(cmd_reload) {
-    t_tm_cmd *cmd = command;
-    printf("commands: |%s|\n", cmd->name);
+    UNUSED_PARAM(node);
+    UNUSED_PARAM(command);
+    // appeler la fonction reload que j'ai faite dans l'autre tm
     return EXIT_SUCCESS;
 }
 
 /* exit has 0 argument */
 DECL_CMD_HANDLER(cmd_exit) {
-    t_tm_cmd *cmd = command;
-    printf("commands: |%s|\n", cmd->name);
+    UNUSED_PARAM(command);
+    add_event(node, (t_event){NULL, CLIENT_EXIT});
+    node->exit_maint = true;
     return EXIT_SUCCESS;
 }
 
 /* help has 0 argument */
 DECL_CMD_HANDLER(cmd_help) {
-    t_tm_cmd *cmd = command;
-    printf("commands: |%s|\n", cmd->name);
+    UNUSED_PARAM(node);
+    UNUSED_PARAM(command);
+    fputs(
+        "start <name>\t\tStart processes\n"
+        "stop <name>\t\tStop processes\n"
+        "restart <name>\t\tRestart all processes\n"
+        "status <name>\t\tGet status for <name> processes\n"
+        "status\t\tGet status for all programs\n"
+        "exit\t\tExit the taskmaster shell and server.\n",
+        stdout);
+    fflush(stdout);
     return EXIT_SUCCESS;
 }
 
@@ -144,7 +193,8 @@ static void err_usr_input(t_tm_node *node, int32_t err) {
 static int32_t sanitize_arg(const t_tm_node *node, t_tm_cmd *command,
                             const char *args) {
     t_pgm *pgm;
-    int32_t i = 0, match_nb = 0, arg_len;
+    int32_t i = 0, arg_len;
+    uint32_t match_nb = 0;
     bool found;
 
     while (args[i] == ' ') i++;
@@ -241,6 +291,8 @@ static inline void clean_command(t_tm_cmd *command) {
     for (int32_t i = 0; i < TM_CMD_NB; i++) command[i].args = NULL;
 }
 
+#include "run_server.h"
+
 /* Main client function. Reads, sanitize & execute client input */
 uint8_t run_client(t_tm_node *node) {
     char *line = NULL;
@@ -257,7 +309,7 @@ uint8_t run_client(t_tm_node *node) {
     completion = get_completion(node, command, cmd_nb);
     ft_readline_add_completion(completion, cmd_nb);
 
-    while ((line = ft_readline("taskmaster$ ")) != NULL) {
+    while (!node->exit_maint && (line = ft_readline("taskmaster$ ")) != NULL) {
         ft_readline_add_history(line);
         format_user_input(line); /* maybe use this only to send to a client */
         hdlr_type = find_cmd(node, command, line);
@@ -269,5 +321,6 @@ uint8_t run_client(t_tm_node *node) {
         clean_command(command);
         free(line);
     }
+    if (pthread_join(node->master_thrd, NULL)) perror("pthread_join");
     return EXIT_SUCCESS;
 }

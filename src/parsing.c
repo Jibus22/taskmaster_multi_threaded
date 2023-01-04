@@ -2,10 +2,11 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <signal.h>
 #include <sys/stat.h>
 
-#include "taskmaster.h"
+#include "run_server.h"
 #include "yaml.h"
 
 /* ============================= error handling ============================= */
@@ -549,21 +550,19 @@ uint8_t load_config_file(t_tm_node *node) {
   return EXIT_SUCCESS;
 
 error:
-  destroy_pgm_list(&node->head);
   yaml_parser_delete(&parser);
-  fclose(node->config_file);
   return EXIT_FAILURE;
 }
 
 /* Sanitize configuration. Verify files and directory access, open logging fd */
-uint8_t sanitize_config(t_tm_node *node) {
+uint8_t sanitize_config(t_pgm *head_pgm) {
   t_pgm_usr *pgm;
   struct stat statbuf;
   t_keys key;
   uint8_t err, tot_err = 0;
   int8_t ret;
 
-  for (t_pgm *head = node->head; head; head = head->privy.next) {
+  for (t_pgm *head = head_pgm; head; head = head->privy.next) {
     pgm = &head->usr;
     err = 0;
 
@@ -616,39 +615,81 @@ uint8_t sanitize_config(t_tm_node *node) {
 
   if (tot_err) {
     fprintf(stderr, "%d error%c detected\n", tot_err, tot_err > 1 ? 's' : '\0');
-    destroy_taskmaster(node);
     return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
 }
 
 /* Set default values in blank variables of t_pgm */
-uint8_t fulfill_config(t_tm_node *node) {
+uint8_t fulfill_config(t_pgm *head_pgm) {
   t_pgm_usr *pgm;
 
-  for (t_pgm *head = node->head; head; head = head->privy.next) {
+  for (t_pgm *head = head_pgm; head; head = head->privy.next) {
     pgm = &head->usr;
     if (!pgm->env.array_val) {
       pgm->env.array_val = calloc(1, sizeof(*pgm->env.array_val));
-      if (!pgm->env.array_val) goto_error("calloc");
+      if (!pgm->env.array_val) handle_error("calloc");
       pgm->env.array_size++;
     }
     if (!pgm->std_out) {
       pgm->std_out = strdup("/dev/null");
-      if (!pgm->std_out) goto_error("strdup");
+      if (!pgm->std_out) handle_error("strdup");
       head->privy.log.out =
           open(pgm->std_out, O_WRONLY | O_CREAT | O_APPEND, LOGFILE_PERM);
-      if ((head->privy.log.out) == -1) goto_error("open");
+      if ((head->privy.log.out) == -1) handle_error("open");
     }
     if (!pgm->std_err) {
       pgm->std_err = strdup("/dev/null");
-      if (!pgm->std_err) goto_error("strdup");
+      if (!pgm->std_err) handle_error("strdup");
       head->privy.log.err =
           open(pgm->std_err, O_WRONLY | O_CREAT | O_APPEND, LOGFILE_PERM);
-      if ((head->privy.log.out) == -1) goto_error("open");
+      if ((head->privy.log.out) == -1) handle_error("open");
     }
     if (!pgm->stopsignal.nb) pgm->stopsignal = siglist[SIGTERM];
   }
+  return EXIT_SUCCESS;
+}
+
+uint8_t init_thrd(t_tm_node *node) {
+  t_thread_data *new_thrd, *current_thrd;
+
+  for (t_pgm *pgm = node->head; pgm; pgm = pgm->privy.next) {
+    if (!pgm->usr.numprocs) continue;
+    new_thrd = calloc(pgm->usr.numprocs, sizeof(*new_thrd));
+    if (!new_thrd) handle_error("calloc");
+    if (pthread_rwlock_init(&pgm->privy.rw_pgm, NULL))
+      handle_error("pthread_rwlock_init");
+
+    for (uint32_t i = 0; i < pgm->usr.numprocs; i++) {
+      current_thrd = &new_thrd[i];
+      if (pthread_rwlock_init(&current_thrd->rw_thrd, NULL))
+        handle_error("pthread_rwlock_init");
+      if (pthread_barrier_init(&current_thrd->sync_barrier, NULL, 2))
+        handle_error("pthread_barrier_init");
+      if (pthread_mutex_init(&current_thrd->mtx_wakeup, NULL))
+        handle_error("pthread_mutex_init");
+      if (pthread_cond_init(&current_thrd->cond_wakeup, NULL))
+        handle_error("pthread_cond_init");
+      if (sem_init(&current_thrd->sync, 0, 0)) handle_error("sem_init");
+      if (pthread_mutex_init(&current_thrd->mtx_timer, NULL))
+        handle_error("pthread_mutex_init");
+      if (pthread_cond_init(&current_thrd->cond_timer, NULL))
+        handle_error("pthread_cond_init");
+      current_thrd->rid = i;
+      current_thrd->pgm = pgm;
+      current_thrd->node = node;
+      current_thrd->restart_counter = pgm->usr.startretries;
+    }
+    pgm->privy.thrd = new_thrd;
+  }
+  return EXIT_SUCCESS;
+}
+
+uint8_t init_taskmaster(t_tm_node *node) {
+  if (load_config_file(node)) goto error;
+  if (sanitize_config(node->head)) goto error;
+  if (fulfill_config(node->head)) goto error;
+  if (init_thrd(node)) goto error;
   return EXIT_SUCCESS;
 
 error:

@@ -30,7 +30,7 @@ CFLAGS := -Werror -fcommon
 
 ### LINK ###
 LDFLAGS := -L$(LIB_DIRECTORY)
-LDLIBS := -lyaml -ltermcap -pthread
+LDLIBS := -lyaml -pthread
 
 
 ### RULES ###
